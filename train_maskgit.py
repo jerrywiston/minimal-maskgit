@@ -1,0 +1,77 @@
+import os
+import torch
+import torchvision.utils as vutils
+
+from models.vqvae import vqvae
+from models.transformer.maskgit import Mvtm
+from dataset import load_dataset
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Data Environment
+dataset, dataloader = load_dataset(image_size=64, batch_size=128, dataroot="datasets/celeba_hq")
+
+# VQVAE Model
+h_dim = 128
+n_embeddings = 1024
+embedding_dim = 8
+vqmodel_path = "vqvae.pt"
+vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
+print("Loading VQVAE model from:", os.path.join("checkpoints", vqmodel_path))
+vq_net.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
+
+# Transformer model
+transformer_config = {
+    "vocab_size": n_embeddings, 
+    "additional_vocab_size": 2,  # [SOS] / [MASK] token 
+    "block_size": 257, 
+    "n_layer": 8,
+    "n_head": 16,
+    "n_embd": 512,
+    "is_causal": False
+}
+mvtm = Mvtm(transformer_config, vq_net, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
+optimizer = torch.optim.Adam(mvtm.parameters(), lr=1e-4, amsgrad=True)
+
+save_path = "checkpoints"
+exp_path = "experiments"
+model_name = "maskgit"
+results_path = os.path.join(exp_path, model_name)
+
+if not os.path.exists(exp_path):
+    os.makedirs(exp_path)
+if not os.path.exists(results_path):
+    os.mkdir(os.path.join(results_path))
+if not os.path.exists(save_path):
+    os.mkdir(save_path)
+
+# Load trained weight
+if os.path.exists(os.path.join(save_path, model_name+".pt")):
+    print("Load trained weights ...")
+    mvtm.load_state_dict(torch.load(os.path.join(save_path, model_name+".pt")))
+
+# Training Iteration
+for epoch in range(1, 100):
+    iter = 0
+    for x, _ in dataloader:
+        optimizer.zero_grad()
+
+        x = x.to(device)
+        logits, loss = mvtm(x)
+        loss.backward()
+        optimizer.step()
+
+        if iter % 100 == 0:
+            print("Epoch " + str(epoch).zfill(4) + ", Iter " + str(iter).zfill(4) +\
+                " | ce_loss: " + str(loss.item()))
+
+            # Generate
+            with torch.no_grad():
+                x_fig = mvtm.sample(batch_size=32)
+                path = os.path.join(results_path, str(epoch).zfill(4) + "_" + str(iter).zfill(4)+".jpg")
+                vutils.save_image(x_fig, path, padding=2, normalize=False)
+
+                # Save model
+                torch.save(mvtm.state_dict(), os.path.join(save_path, model_name+".pt"))
+        
+        iter += 1      
