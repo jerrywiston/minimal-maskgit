@@ -10,18 +10,27 @@ from tqdm import tqdm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Data Environment
-dataset, dataloader = load_dataset(image_size=64, batch_size=256, dataroot="datasets/celeba_hq")
+dataset, dataloader = load_dataset(image_size=64, batch_size=64, dataroot="datasets/celeba_hq")
 
 # Model Parameters
-config_rgb = {
+config_vq = {
     "h_dim": 128,
     "n_embeddings": 1024, 
     "embedding_dim": 8, 
     "input_channels": 3, # RGB input
 }
 
-# Model and Optimizer
-vqnet = vqvae.VQVAE(**config_rgb).to(device)
+vqnet = vqvae.VQVae(**config_vq).to(device)
+""" Use Finite Scalar Quantization
+config_fsq = {
+    "h_dim": 128,
+    "levels": [8,5,5,5], 
+    "embedding_dim": 8, 
+    "input_channels": 3, # RGB input
+}
+vqnet = vqvae.VQVaeFsq(**config_fsq).to(device)
+"""
+
 vggnet = losses.Vgg16().to(device)
 disc = losses.Discriminator().to(device)
 optimizer = optim.Adam(vqnet.parameters(), lr=1e-4, amsgrad=True)

@@ -3,6 +3,64 @@ from torch import nn, einsum
 import torch.nn.functional as F
 import math
 
+#################### Simple Implementation (for debug) ####################
+
+class ResBlock(nn.Module):
+    def __init__(self, input_channels, channel):
+        super().__init__()
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_channels, channel, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channel, input_channels, 1),
+        )
+
+    def forward(self, x):
+        out = self.conv(x)
+        out += x
+        out = F.relu(out)
+        return out
+
+class EncoderSimple(nn.Module):
+    def __init__(self, input_channels=3, embedding_dim=3, ch=64):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(input_channels, ch, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(ch, 2*ch, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(2*ch, 2*ch, 3, padding=1),
+            nn.ReLU(),
+            ResBlock(2*ch, 2*ch//4),
+            ResBlock(2*ch, 2*ch//4),
+        )
+        self.proj = nn.Conv2d(2*ch, embedding_dim, 1)
+
+    def forward(self, x):
+        h = self.net(x)
+        z = self.proj(h)
+        return z
+
+class DecoderSimple(nn.Module):
+    def __init__(self, embedding_dim=32, ch=64, output_channels=3):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(embedding_dim, 2*ch, 3, padding=1),
+            nn.ReLU(),
+            ResBlock(2*ch, 2*ch//4),
+            ResBlock(2*ch, 2*ch//4),
+            nn.ConvTranspose2d(2*ch, ch, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(ch, output_channels, 4, stride=2, padding=1),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+#################### Basic Bacone Implementation ####################
+
 class Downsample(nn.Module):
     def __init__(self, in_channels, with_conv=True):
         super().__init__()
@@ -237,59 +295,3 @@ class DecoderAtt(nn.Module):
         for layer in self.net:
             h = layer(h)
         return h
-
-# ---------------------------------------------------------------------------------------------
-
-class ResBlock(nn.Module):
-    def __init__(self, input_channels, channel):
-        super().__init__()
-
-        self.conv = nn.Sequential(
-            nn.Conv2d(input_channels, channel, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channel, input_channels, 1),
-        )
-
-    def forward(self, x):
-        out = self.conv(x)
-        out += x
-        out = F.relu(out)
-        return out
-
-class EncoderSimple(nn.Module):
-    def __init__(self, input_channels=3, embedding_dim=3, ch=64):
-        super().__init__()
-
-        self.net = nn.Sequential(
-            nn.Conv2d(input_channels, ch, 4, stride=2, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(ch, 2*ch, 4, stride=2, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(2*ch, 2*ch, 3, padding=1),
-            nn.ReLU(),
-            ResBlock(2*ch, 2*ch//4),
-            ResBlock(2*ch, 2*ch//4),
-        )
-        self.proj = nn.Conv2d(2*ch, embedding_dim, 1)
-
-    def forward(self, x):
-        h = self.net(x)
-        z = self.proj(h)
-        return z
-
-class DecoderSimple(nn.Module):
-    def __init__(self, embedding_dim=32, ch=64, output_channels=3):
-        super().__init__()
-
-        self.net = nn.Sequential(
-            nn.Conv2d(embedding_dim, 2*ch, 3, padding=1),
-            nn.ReLU(),
-            ResBlock(2*ch, 2*ch//4),
-            ResBlock(2*ch, 2*ch//4),
-            nn.ConvTranspose2d(2*ch, ch, 4, stride=2, padding=1),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(ch, output_channels, 4, stride=2, padding=1),
-        )
-
-    def forward(self, x):
-        return self.net(x)

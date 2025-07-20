@@ -9,28 +9,42 @@ from dataset import load_dataset
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Data Environment
-dataset, dataloader = load_dataset(image_size=64, batch_size=128, dataroot="datasets/celeba_hq")
+dataset, dataloader = load_dataset(image_size=64, batch_size=64, dataroot="datasets/celeba_hq")
 
 # VQVAE Model
-h_dim = 128
-n_embeddings = 1024
-embedding_dim = 8
+config_vq = {
+    "h_dim": 128,
+    "n_embeddings": 1024, 
+    "embedding_dim": 8, 
+    "input_channels": 3, # RGB input
+}
 vqmodel_path = "vqvae.pt"
-vq_net = vqvae.VQVAE(h_dim, n_embeddings, embedding_dim).to(device)
+vqnet = vqvae.VQVae(**config_vq).to(device)
+""" Use Finite Scalar Quantization
+config_fsq = {
+    "h_dim": 128,
+    "levels": [8,5,5,5], 
+    "embedding_dim": 8, 
+    "input_channels": 3, # RGB input
+}
+vqnet = vqvae.VQVaeFsq(**config_fsq).to(device)
+"""
 print("Loading VQVAE model from:", os.path.join("checkpoints", vqmodel_path))
-vq_net.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
+vqnet.load_state_dict(torch.load(os.path.join("checkpoints",vqmodel_path)))
 
 # Transformer model
 transformer_config = {
-    "vocab_size": n_embeddings, 
+    "vocab_size": 1000, 
     "additional_vocab_size": 2,  # [SOS] / [MASK] token 
     "block_size": 257, 
     "n_layer": 8,
     "n_head": 16,
     "n_embd": 512,
-    "is_causal": False
+    "is_causal": False,
+    "use_condition": False
 }
-mvtm = Mvtm(transformer_config, vq_net, n_embeddings=n_embeddings, embedding_dim=embedding_dim).to(device)
+
+mvtm = Mvtm(vqnet, [16, 16], transformer_config).to(device)
 optimizer = torch.optim.Adam(mvtm.parameters(), lr=1e-4, amsgrad=True)
 
 save_path = "checkpoints"
