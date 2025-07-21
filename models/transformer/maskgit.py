@@ -39,33 +39,6 @@ class Bert(nn.Module):
         logits = self.proj_out(x)
         return logits
 
-class BertCondAdd(nn.Module):
-    def __init__(self, vocab_size, additional_vocab_size, embedding_dim, nhead=8, num_layers=6, max_block_size=257, use_condition=True):
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size # [SOS] and [Mask] token
-        self.embedding_dim = embedding_dim
-        self.max_block_size = max_block_size # Image tokens and 1 SOS token
-        self.use_condition = use_condition
-
-        self.wte = nn.Embedding(vocab_size + additional_vocab_size, embedding_dim)
-        self.wpe = nn.Embedding(max_block_size, embedding_dim) 
-
-        Block = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead, batch_first=True, norm_first=True)
-        self.transformer = nn.TransformerEncoder(Block, num_layers=num_layers)
-
-        self.proj_out = nn.Linear(embedding_dim, vocab_size)
-    
-    def forward(self, x, c):
-        device = x.device
-        batch_size, seq_len = x.shape
-        positions = torch.arange(0, seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
-        x = self.wte(x) + self.wpe(positions)
-        x[:,1:] = x[:,1:] + c
-        x = self.transformer(x)
-        logits = self.proj_out(x)
-        return logits
-
 # Masked Visual Token Modeling (MVTM) for MaskGIT
 class Mvtm(nn.Module):
     def __init__(self, vqmodel, vq_size, transformer_config, cond_model=None):

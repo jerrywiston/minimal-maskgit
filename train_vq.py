@@ -12,15 +12,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Data Environment
 dataset, dataloader = load_dataset(image_size=64, batch_size=64, dataroot="datasets/celeba_hq")
 
-# Model Parameters
+# Create Model
 config_vq = {
     "h_dim": 128,
     "n_embeddings": 1024, 
     "embedding_dim": 8, 
     "input_channels": 3, # RGB input
 }
-
 vqnet = vqvae.VQVae(**config_vq).to(device)
+model_name = "vqvae"
+
 """ Use Finite Scalar Quantization
 config_fsq = {
     "h_dim": 128,
@@ -29,16 +30,18 @@ config_fsq = {
     "input_channels": 3, # RGB input
 }
 vqnet = vqvae.VQVaeFsq(**config_fsq).to(device)
+model_name = "fsqvae"
 """
 
+# Create Optimizer
 vggnet = losses.Vgg16().to(device)
 disc = losses.Discriminator().to(device)
 optimizer = optim.Adam(vqnet.parameters(), lr=1e-4, amsgrad=True)
 optimizer_disc = optim.Adam(disc.parameters(), lr=1e-4, amsgrad=True)
 
+# Set Parameters of Experiment
 save_path = "checkpoints"
 exp_path = "experiments"
-model_name = "vqvae"
 results_path = os.path.join(exp_path, model_name)
 
 if not os.path.exists(exp_path):
@@ -49,7 +52,7 @@ if not os.path.exists(save_path):
     os.mkdir(save_path)
 
 # Training Iteration
-for epoch in tqdm(range(1, 100)):
+for epoch in range(1, 100):
     iter = 0
     for x, _ in tqdm(dataloader):
         optimizer.zero_grad()
